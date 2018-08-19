@@ -59,8 +59,8 @@ function isPoolDaemonSyncedHandler(req, res) {
         return;
     }
 
-    /* Get mode height and compare to daemonStatus */
-    var modeHeight = mode(globals.localDaemons.map(x => x.height));
+    /* Get mode height and compare to the rest of the pools */
+    var modeHeight = mode(globals.networkDaemons.map(x => x.height));
 
     /* The host making the requests info */
     var currentDaemon = globals.localDaemons.find(x => x.host === req.headers.host);
