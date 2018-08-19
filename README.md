@@ -15,6 +15,8 @@ Provides an API to monitor cryptonote mining pools
 
 `node pool-guardian.js`
 
+By default the server listens on 8080, but this can be changed in the config.
+
 ## Endpoints
 
 * `/heights` - Lists the heights of all known pools
