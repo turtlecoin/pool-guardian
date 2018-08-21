@@ -10,6 +10,10 @@ config.poolHostsToDaemons = [
 /* The port to run the server on */
 config.serverPort = 8080;
 
+/* Should we remove the port when parsing the hostname, e.g. example.com
+   instead of example.com:8080 */
+config.stripPortFromHost = true;
+
 /* The max amount of blocks a local daemon can be away from the median before
    reporting it has de-synced */
 config.localDaemonMaxDeviance = 10;

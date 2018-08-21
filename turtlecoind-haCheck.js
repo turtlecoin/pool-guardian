@@ -1,15 +1,15 @@
-var http = require('http');
-var express = require('express');
-var async = require('async');
-var request = require('request');
+const http = require('http');
+const express = require('express');
+const async = require('async');
+const request = require('request');
 const zlib = require('zlib');
 const TurtleCoind = require('turtlecoin-rpc').TurtleCoind;
 
-var logSystem = 'turtlecoind-haCheck'
-require('./exceptionWriter.js')(logSystem)
+const logSystem = 'turtlecoind-haCheck';
+require('./exceptionWriter.js')(logSystem);
 
-var log = function (severity, system, text, data) {
-  global.log(severity, system, text, data)
+const log = function (severity, system, text, data) {
+  global.log(severity, system, text, data);
 }
 
 var globals = {
@@ -36,7 +36,7 @@ function initGlobals(callback) {
         getNetworkPoolInfo(function() {
             /* Get the network daemon info */
             getNetworkDaemonStatus(function() {                
-                 log('info', logSystem, 'Finished initializing', []);
+                log('info', logSystem, 'Finished initializing', []);
                 /* Start the app */
                 callback();
             });
@@ -57,39 +57,45 @@ function supportedPool(pool) {
 }
 
 function haCheckHandler(req, res) {
-    /* Make sure the host header is present in the defined hosts in config */
+    var host = req.headers.host;
 
-    if (!isValidHost(req.headers.host)) {
-        log('info', logSystem, 'Request for host: %s , is invalid', [req.headers.host])
+    /* Remove the port, e.g. example.com instead of example.com:8080 */
+    if (config.stripPortFromHost) {
+        host = host.split(':')[0];
+    }
+
+    /* Make sure the host header is present in the defined hosts in config */
+    if (!isValidHost(host)) {
+        log('info', logSystem, 'Request for host: %s, is invalid', [host])
         res.writeHead(400, {'Content-Type': 'text/html'})
-        res.write(`Specified host (${req.headers.host}) is not present in config!`)
+        res.write(`Specified host (${host}) is not present in config!`)
         res.end();
         return;
     }
 
     /* Get mode height and compare to the rest of the pools */
-    var modeHeight = mode(globals.networkDaemons.map(x => x.height));
+    const modeHeight = mode(globals.networkDaemons.map(x => x.height));
 
     /* The host making the requests info */
-    var currentDaemon = globals.localDaemons.find(x => x.host === req.headers.host);
+    const currentDaemon = globals.localDaemons.find(x => x.host === host);
 
-    var deviance = Math.abs(modeHeight - currentDaemon.height)
-    var status = deviance <= config.localDaemonMaxDeviance
-    var statusDescription = (status) ? "pass" : "fail"
+    const deviance = Math.abs(modeHeight - currentDaemon.height);
+    const status = deviance <= config.localDaemonMaxDeviance;
+    const statusDescription = (status) ? "pass" : "fail";
     
-    log('info', logSystem, 'Request for host: %s , Mode height: %s , Daemon Height: %s , Deviance: %s , Status: %s', [req.headers.host, modeHeight, currentDaemon.height, deviance, statusDescription]);
+    log('info', logSystem, 'Request for host: %s , Mode height: %s , Daemon Height: %s , Deviance: %s , Status: %s', [host, modeHeight, currentDaemon.height, deviance, statusDescription]);
 
-    var response = JSON.stringify({host: req.headers.host, modeHeight: modeHeight, daemonHeight: currentDaemon.height, deviance: deviance, status: statusDescription})
+    const response = JSON.stringify({host: host, modeHeight: modeHeight, daemonHeight: currentDaemon.height, deviance: deviance, status: statusDescription});
 
     /* Is it too much above or below the mode value */
     if (status) {
-        res.writeHead(200, {'Content-Type': 'text/html'})
-        res.write(response)
+        res.writeHead(200, {'Content-Type': 'text/html'});
+        res.write(response);
         res.end();
     } else {
-        res.writeHead(503, {'Content-Type': 'text/html'})
-        res.write(response)
-        res.end()
+        res.writeHead(503, {'Content-Type': 'text/html'});
+        res.write(response);
+        res.end();
     }
 }
 
@@ -101,7 +107,7 @@ function isValidHost(host) {
 }
 
 function launchServer() {
-    var server = express();
+    const server = express();
 
     server.get('/hacheck', haCheckHandler);
     server.get('/heights', heightsHandler);
@@ -119,11 +125,11 @@ function getLocalDaemonStatus(callback) {
     async.map(config.poolHostsToDaemons, getHeight, function(err, promises) {
         Promise.all(promises).then(results => {
             globals.localDaemons = results
-        });
 
-        if (callback) {
-            callback();
-        }
+            if (callback) {
+                callback();
+            }
+        });
     });
 }
 
@@ -133,7 +139,7 @@ function getNetworkDaemonStatus(callback) {
         results = results.filter(val => val !== null);
 
         /* Get the mode height of all the pools now we've got all their data */
-        var modeHeight = mode(results.map(x => x.height));
+        const modeHeight = mode(results.map(x => x.height));
 
         /* Update the modeHeight of each entry with this new height */
         globals.networkDaemons = results.map(entry => {
@@ -157,21 +163,21 @@ function getPoolInfo(pool, callback) {
     }
 }
 
-function requestToJSON(url) {
-    var options = {
+function requestToJSON(url, callback) {
+    const options = {
         url: url,
         timeout: config.networkDaemonTimeout * 1000,
         strictSSL: false,
         encoding: null,
     };
 
-    try {
-        request(options, function(error, response, body) {
-            if (error !== null) {
-                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, error]);
-                return undefined;
-            }
+    request(options, function(error, response, body) {
+        if (error !== null) {
+            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, error]);
+            return callback(undefined);
+        }
 
+        try {
             switch (response.headers['content-encoding']) {
                 case 'deflate':
                     body = zlib.inflateRawSync(body).toString();
@@ -181,67 +187,68 @@ function requestToJSON(url) {
                     break;
             }
 
-            return JSON.parse(body);
-        });
-    } catch (e) {
-        log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, e]);
-        return undefined;
-    }
+            return callback(JSON.parse(body));
+
+        } catch (e) {
+            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, e]);
+            return callback(undefined);
+        }
+    });
 }
 
 function getForknotePoolInfo(pool, callback) {
-    var json = requestToJSON(pool.api + 'stats');
+    requestToJSON(pool.api + 'stats', function(json) {
+        /* Annoyingly, if we return an error in the callback it will stop
+           the processing completely. This is obviously not desired, so we
+           can hack around it by returning (null, null), then filtering null
+           values. */
+        if (json === undefined) {
+            return callback(null, null);
+        }
 
-    /* Annoyingly, if we return an error in the callback it will stop
-       the processing completely. This is obviously not desired, so we
-       can hack around it by returning (null, null), then filtering null
-       values. */
-    if (json === undefined) {
-        return callback(null, null);
-    }
-    /* Don't divide by zero */
-    var estimatedSolveTime = json.pool.hashrate == 0 ? 'Never'
-                           : json.network.difficulty / json.pool.hashrate;
+        /* Don't divide by zero */
+        const estimatedSolveTime = json.pool.hashrate == 0 ? 'Never'
+                                 : json.network.difficulty / json.pool.hashrate;
 
-    var lastFound = json.pool.lastBlockFound == 0 ? 'Never'
-                  : json.pool.lastBlockFound;
+        const lastFound = json.pool.lastBlockFound == 0 ? 'Never'
+                        : json.pool.lastBlockFound;
 
-    return callback(null, {
-        url: pool.url,
-        height: json.network.height,
-        estimatedSolveTime: estimatedSolveTime,
-        lastFound: lastFound,
-        /* We're not filling this in yet - we want to use all the height
-           values we just calculated, so lets fill it in once we're done
-           with this. */
-        mode: undefined,
+        return callback(null, {
+            url: pool.url,
+            height: json.network.height,
+            estimatedSolveTime: estimatedSolveTime,
+            lastFound: lastFound,
+            /* We're not filling this in yet - we want to use all the height
+               values we just calculated, so lets fill it in once we're done
+               with this. */
+            mode: undefined,
+        });
     });
 }
 
 function getNodeJSPoolInfo(pool, callback) {
-    var poolJSON = requestToJSON(pool.api + 'pool/stats');
-    var networkJSON = requestToJSON(pool.api + 'network/stats');
+    requestToJSON(pool.api + 'pool/stats', function(poolJSON) {
+        requestToJSON(pool.api + 'network/stats', function(networkJSON) {
+            if (poolJSON === undefined || networkJSON === undefined) {
+                return callback(null, null);
+            }
 
-    if (poolJSON === undefined || networkJSON === undefined) {
-        return callback(null, null);
-    }
-
-    return callback(null, {
-        url: pool.url,
-        height: networkJSON.height,
-        estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
-        lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
-        mode: undefined,
+            return callback(null, {
+                url: pool.url,
+                height: networkJSON.height,
+                estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
+                lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
+                mode: undefined,
+            });
+        });
     });
 }
 
 function secsSinceLastBlock(timestamp) {
     /* This technically could be in the future... */
-    var lastFound = new Date(timestamp * 1000);
+    const lastFound = new Date(timestamp * 1000);
 
-    var now = Date.now();
-
-    return (now - lastFound) / 1000;
+    return (Date.now() - lastFound) / 1000;
 }
 
 function getHeight(pool, callback) {
@@ -261,9 +268,11 @@ function getHeight(pool, callback) {
 }
 
 function getNetworkPoolInfo(callback) {
-    request(config.poolsJSON, function(error, response, body) {
-        globals.networkPools = JSON.parse(body);
-        
+    requestToJSON(config.poolsJSON, function(json) {
+        if (json !== undefined) {
+            globals.networkPools = json;
+        }
+
         if (callback) {
             callback();
         }
