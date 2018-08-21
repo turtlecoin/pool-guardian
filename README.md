@@ -13,14 +13,14 @@ Provides an API to monitor cryptonote mining pools
 
 ## Running
 
-`node pool-guardian.js`
+`node init.js`
 
 By default the server listens on 8080, but this can be changed in the config.
 
 ## Endpoints
 
 * `/heights` - Lists the heights of all known pools
-* `/ispooldaemonsynced` - Compares the pool daemon which maps to the passed in HOST header to the other pool daemons, and returns a 200 code if it is within 10 blocks of the mode height, of a 503 code if not. Designed to work with haproxy.
+* `/hacheck` - Compares the pool daemon which maps to the passed in HOST header to the other pool daemons, and returns a 200 code if it is within 10 blocks of the mode height, of a 503 code if not. Designed to work with haproxy.
 
 ## Configuring
 

@@ -3,10 +3,8 @@ var config = {};
 /* A mapping of host headings to daemon IP's */
 config.poolHostsToDaemons = [
     /* Of course these are just examples */
-    {host: "a.com", daemon: {host: "us-west.turtlenode.io", port: "11898"}},
-    {host: "b.com", daemon: {host: "us-east.turtlenode.io", port: "11898"}},
-    {host: "c.com", daemon: {host: "europe.turtlenode.io", port: "11898"}},
-    {host: "localhost:8080", daemon: {host: "127.0.0.1", port: "11898"}},
+    {host: "daemon-a.myhost.com", daemon: {host: "my.daemonhost.com", port: "11898"}},
+    {host: "daemon-b.myhost.com", daemon: {host: "127.0.0.1", port: "11898"}},
 ];
 
 /* The port to run the server on */
@@ -39,4 +37,17 @@ config.poolJSONRefreshRate = 60 * 60;
 /* The JSON link for the pools to compare our height to */
 config.poolsJSON = "https://raw.githubusercontent.com/turtlecoin/turtlecoin-pools-json/master/v2/turtlecoin-pools.json";
 
+config.logging = {
+  "files": {
+      "level": "info",
+      "directory": "logs",
+      "flushInterval": 5
+  },
+  "console": {
+      "level": "info",
+      "colors": true
+  }
+}
+
 module.exports = config;
+

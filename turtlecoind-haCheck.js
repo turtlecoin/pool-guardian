@@ -1,9 +1,15 @@
 var http = require('http');
-var config = require('./config');
 var express = require('express');
 var async = require('async');
 var request = require('request');
 const TurtleCoind = require('turtlecoin-rpc').TurtleCoind;
+
+var logSystem = 'turtlecoind-haCheck'
+require('./exceptionWriter.js')(logSystem)
+
+var log = function (severity, system, text, data) {
+  global.log(severity, system, text, data)
+}
 
 var globals = {
     localDaemons: undefined,
@@ -28,9 +34,8 @@ function initGlobals(callback) {
         /* Parse the pools JSON */
         getNetworkPoolInfo(function() {
             /* Get the network daemon info */
-            getNetworkDaemonStatus(function() {
-                console.log('Finished initializing');
-
+            getNetworkDaemonStatus(function() {                
+                 log('info', logSystem, 'Finished initializing', []);
                 /* Start the app */
                 callback();
             });
@@ -50,11 +55,13 @@ function supportedPool(pool) {
     return false;
 }
 
-function isPoolDaemonSyncedHandler(req, res) {
+function haCheckHandler(req, res) {
     /* Make sure the host header is present in the defined hosts in config */
+
     if (!isValidHost(req.headers.host)) {
-        res.writeHead(400, {'Content-Type': 'text/html'});
-        res.write(`Specified host (${req.headers.host}) is not present in config!`);
+        log('info', logSystem, 'Request for host: %s , is invalid', [req.headers.host])
+        res.writeHead(400, {'Content-Type': 'text/html'})
+        res.write(`Specified host (${req.headers.host}) is not present in config!`)
         res.end();
         return;
     }
@@ -65,13 +72,23 @@ function isPoolDaemonSyncedHandler(req, res) {
     /* The host making the requests info */
     var currentDaemon = globals.localDaemons.find(x => x.host === req.headers.host);
 
+    var deviance = Math.abs(modeHeight - currentDaemon.height)
+    var status = deviance <= config.localDaemonMaxDeviance
+    var statusDescription = (status) ? "pass" : "fail"
+    
+    log('info', logSystem, 'Request for host: %s , Mode height: %s , Daemon Height: %s , Deviance: %s , Status: %s', [req.headers.host, modeHeight, currentDaemon.height, deviance, statusDescription]);
+
+    var response = JSON.stringify({host: req.headers.host, modeHeight: modeHeight, daemonHeight: currentDaemon.height, deviance: deviance, status: statusDescription})
+
     /* Is it too much above or below the mode value */
-    if (Math.abs(modeHeight - currentDaemon.height) > config.localDaemonMaxDeviance) {
-        res.writeHead(503);
+    if (status) {
+        res.writeHead(200, {'Content-Type': 'text/html'})
+        res.write(response)
         res.end();
     } else {
-        res.writeHead(200);
-        res.end();
+        res.writeHead(503, {'Content-Type': 'text/html'})
+        res.write(response)
+        res.end()
     }
 }
 
@@ -85,7 +102,7 @@ function isValidHost(host) {
 function launchServer() {
     var server = express();
 
-    server.get('/ispooldaemonsynced', isPoolDaemonSyncedHandler);
+    server.get('/hacheck', haCheckHandler);
     server.get('/heights', heightsHandler);
 
     server.listen(config.serverPort);
@@ -149,8 +166,8 @@ function getForknotePoolInfo(pool, callback) {
            the processing completely. This is obviously not desired, so we
            can hack around it by returning (null, null), then filtering null
            values. */
-        if (error !== null) {
-            console.log(`Failed to get pool info from ${pool.api}, reason: ${error}`);
+        if (error !== null) {           
+            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, error]);
             return callback(null, null);
         }
 
@@ -174,8 +191,8 @@ function getForknotePoolInfo(pool, callback) {
                    with this. */
                 mode: undefined,
             });
-        } catch (e) {
-            console.log(`Failed to get pool info from ${pool.api}, reason: ${e}`);
+        } catch (e) {            
+            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, e]);
             return callback(null, null);
         }
     });
@@ -184,8 +201,8 @@ function getForknotePoolInfo(pool, callback) {
 function getNodeJSPoolInfo(pool, callback) {
     request(pool.api + 'pool/stats', function(error, response, poolBody) {
         request(pool.api + 'network/stats', function(error2, response2, networkBody) {
-            if (error !== null || error2 !== null) {
-                console.log(`Failed to get pool info from ${pool.api}, reason: ${error !== null ? error : error2}`);
+            if (error !== null || error2 !== null) {                
+                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, error !== null ? error : error2]);
                 return callback(null, null);
             }
 
@@ -200,8 +217,8 @@ function getNodeJSPoolInfo(pool, callback) {
                     lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
                     mode: undefined,
                 });
-            } catch (e) {
-                console.log(`Failed to get pool info from ${pool.api}, reason: ${e}`);
+            } catch (e) {                
+                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, e]);
                 return callback(null, null);
             }
         });
@@ -227,8 +244,8 @@ function getHeight(pool, callback) {
     /* Get the height if we can */
     daemon.getHeight().then((height) => {
         return callback(null, {host: pool.host, height: height.height});
-    }).catch((err) => {
-        console.log(`Failed to get height from ${pool.daemon.host}, reason: ${err}`);
+    }).catch((err) => {        
+        log('info', logSystem, 'Failed to get height from %s, reason: %s', [pool.daemon.host, err]);
         return callback(null, {host: pool.host, height: 0});
     });
 }
