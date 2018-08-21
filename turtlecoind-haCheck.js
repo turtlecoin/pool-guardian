@@ -2,6 +2,7 @@ var http = require('http');
 var express = require('express');
 var async = require('async');
 var request = require('request');
+const zlib = require('zlib');
 const TurtleCoind = require('turtlecoin-rpc').TurtleCoind;
 
 var logSystem = 'turtlecoind-haCheck'
@@ -156,72 +157,81 @@ function getPoolInfo(pool, callback) {
     }
 }
 
+function requestToJSON(url) {
+    var options = {
+        url: url,
+        timeout: config.networkDaemonTimeout * 1000,
+        strictSSL: false,
+        encoding: null,
+    };
+
+    try {
+        request(options, function(error, response, body) {
+            if (error !== null) {
+                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, error]);
+                return undefined;
+            }
+
+            switch (response.headers['content-encoding']) {
+                case 'deflate':
+                    body = zlib.inflateRawSync(body).toString();
+                    break;
+                case 'gzip':
+                    body = zlib.gunzipRawSync(body).toString();
+                    break;
+            }
+
+            return JSON.parse(body);
+        });
+    } catch (e) {
+        log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [url, e]);
+        return undefined;
+    }
+}
+
 function getForknotePoolInfo(pool, callback) {
-    request({
-        url: pool.api + 'stats',
-        timeout: config.networkDaemonTimeout * 1000
-    }, function(error, response, body) {
+    var json = requestToJSON(pool.api + 'stats');
 
-        /* Annoyingly, if we return an error in the callback it will stop
-           the processing completely. This is obviously not desired, so we
-           can hack around it by returning (null, null), then filtering null
-           values. */
-        if (error !== null) {           
-            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, error]);
-            return callback(null, null);
-        }
+    /* Annoyingly, if we return an error in the callback it will stop
+       the processing completely. This is obviously not desired, so we
+       can hack around it by returning (null, null), then filtering null
+       values. */
+    if (json === undefined) {
+        return callback(null, null);
+    }
+    /* Don't divide by zero */
+    var estimatedSolveTime = json.pool.hashrate == 0 ? 'Never'
+                           : json.network.difficulty / json.pool.hashrate;
 
-        try {
-            var json = JSON.parse(body);
+    var lastFound = json.pool.lastBlockFound == 0 ? 'Never'
+                  : json.pool.lastBlockFound;
 
-            /* Don't divide by zero */
-            var estimatedSolveTime = json.pool.hashrate == 0 ? 'Never'
-                                   : json.network.difficulty / json.pool.hashrate;
-
-            var lastFound = json.pool.lastBlockFound == 0 ? 'Never'
-                          : json.pool.lastBlockFound;
-
-            return callback(null, {
-                url: pool.url,
-                height: json.network.height,
-                estimatedSolveTime: estimatedSolveTime,
-                lastFound: lastFound,
-                /* We're not filling this in yet - we want to use all the height
-                   values we just calculated, so lets fill it in once we're done
-                   with this. */
-                mode: undefined,
-            });
-        } catch (e) {            
-            log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, e]);
-            return callback(null, null);
-        }
+    return callback(null, {
+        url: pool.url,
+        height: json.network.height,
+        estimatedSolveTime: estimatedSolveTime,
+        lastFound: lastFound,
+        /* We're not filling this in yet - we want to use all the height
+           values we just calculated, so lets fill it in once we're done
+           with this. */
+        mode: undefined,
     });
 }
 
 function getNodeJSPoolInfo(pool, callback) {
-    request(pool.api + 'pool/stats', function(error, response, poolBody) {
-        request(pool.api + 'network/stats', function(error2, response2, networkBody) {
-            if (error !== null || error2 !== null) {                
-                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, error !== null ? error : error2]);
-                return callback(null, null);
-            }
+    var poolJSON = requestToJSON(pool.api + 'pool/stats');
+    var networkJSON = requestToJSON(pool.api + 'network/stats');
 
-            try {
-                var poolJSON = JSON.parse(poolBody);
-                var networkJSON = JSON.parse(networkBody);
+    if (poolJSON === undefined || networkJSON === undefined) {
+        return callback(null, null);
+    }
 
-                return callback(null, {
-                    url: pool.url,
-                    height: networkJSON.height,
-                    estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
-                    lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
-                    mode: undefined,
-                });
-            } catch (e) {                
-                log('info', logSystem, 'Failed to get pool info from %s, reason: %s', [pool.api, e]);
-                return callback(null, null);
-            }
-        });
+    return callback(null, {
+        url: pool.url,
+        height: networkJSON.height,
+        estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
+        lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
+        mode: undefined,
     });
 }
 

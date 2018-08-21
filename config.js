@@ -50,4 +50,3 @@ config.logging = {
 }
 
 module.exports = config;
-
