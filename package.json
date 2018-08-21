@@ -12,6 +12,8 @@
     "async": "^2.6.1",
     "express": "^4.16.3",
     "request": "^2.88.0",
-    "turtlecoin-rpc": "^0.7.0"
+    "turtlecoin-rpc": "^0.7.0",
+    "cli-color": "*",
+    "dateformat": "*"
   }
 }
