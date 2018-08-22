@@ -57,11 +57,13 @@ function supportedPool(pool) {
 }
 
 function haCheckHandler(req, res) {
-    var host = req.headers.host;
+    var host;
 
-    /* Remove the port, e.g. example.com instead of example.com:8080 */
-    if (config.stripPortFromHost) {
-        host = host.split(':')[0];
+    if (req.headers['x-haproxy-server-state']){
+        log('info', logSystem, req.headers['x-haproxy-server-state']);
+        var regex = /name=([^;]+)/;
+        var match = req.headers['x-haproxy-server-state'].match(regex);
+        if (match) {host = match[1]}
     }
 
     /* Make sure the host header is present in the defined hosts in config */
@@ -81,22 +83,16 @@ function haCheckHandler(req, res) {
 
     const deviance = Math.abs(modeHeight - currentDaemon.height);
     const status = deviance <= config.localDaemonMaxDeviance;
-    const statusDescription = (status) ? "pass" : "fail";
-    
+    const statusDescription = (status) ? "UP" : "DOWN";
+    const statusCode = (status) ? 200 : 503;
+
     log('info', logSystem, 'Request for host: %s , Mode height: %s , Daemon Height: %s , Deviance: %s , Status: %s', [host, modeHeight, currentDaemon.height, deviance, statusDescription]);
 
     const response = JSON.stringify({host: host, modeHeight: modeHeight, daemonHeight: currentDaemon.height, deviance: deviance, status: statusDescription});
 
-    /* Is it too much above or below the mode value */
-    if (status) {
-        res.writeHead(200, {'Content-Type': 'text/html'});
-        res.write(response);
-        res.end();
-    } else {
-        res.writeHead(503, {'Content-Type': 'text/html'});
-        res.write(response);
-        res.end();
-    }
+    res.writeHead(statusCode, {'Content-Type': 'text/html'});
+    res.write(response);
+    res.end();
 }
 
 /* Is the host specified present in the defined hosts in config */
