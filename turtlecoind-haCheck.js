@@ -64,6 +64,14 @@ function haCheckHandler(req, res) {
         var regex = /name=([^;]+)/;
         var match = req.headers['x-haproxy-server-state'].match(regex);
         if (match) {host = match[1]}
+    } else {
+        host = req.query.host
+        if (!host){
+            log('info', logSystem, 'Request is missing header x-haproxy-server-state or host query', [])
+            res.writeHead(400, {'Content-Type': 'text/html'})
+            res.write(`Request is missing header x-haproxy-server-state or host query`)
+            res.end();
+        }
     }
 
     /* Make sure the host header is present in the defined hosts in config */
