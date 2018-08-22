@@ -71,6 +71,7 @@ function haCheckHandler(req, res) {
             res.writeHead(400, {'Content-Type': 'text/html'})
             res.write(`Request is missing header x-haproxy-server-state or host query`)
             res.end();
+            return;
         }
     }
 
