@@ -28,7 +28,7 @@ All configurable settings are available in config.js, and are all commented with
 
 You probably want to be looking at config.serviceNodes initially.
 
-Example Configuration based on Ununtu 16.04.
+Example Configuration based on Ubuntu 16.04.
 
 * Install HAProxy:
 
