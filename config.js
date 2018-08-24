@@ -17,7 +17,7 @@ config.serverPort = 8080;
 config.serviceNodeMaxFailoverDeviance = 10;
 
 /* The max amount of blocks a service node can be away from the median before
-   reporting it has de-synced. This is used with url quieres for services like
+   reporting it has de-synced. This is used with url queries for services like
    uptime robot, pingdom, monitority.
 */
 config.serviceNodeMaxAlertDeviance = 5;
