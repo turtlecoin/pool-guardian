@@ -9,7 +9,7 @@ const logSystem = 'turtlecoind-haCheck';
 require('./exceptionWriter.js')(logSystem);
 
 const log = function (severity, system, text, data) {
-  global.log(severity, system, text, data);
+    global.log(severity, system, text, data);
 }
 
 var globals = {
@@ -68,28 +68,36 @@ function isSupportedPool(pool) {
 
 function haCheckHandler(req, res) {
     var haName;
+    var isMiningAddress = false;
+    var isFailoverCheck = false;
 
-    if (req.headers['x-haproxy-server-state']){
+    // HAProxy server headers take precedence
+    if (req.headers['x-haproxy-server-state']) {
         log('info', logSystem, 'x-haproxy-server-state: %s', [req.headers['x-haproxy-server-state']]);
         const regex = /name=([^;]+)/;
         const match = req.headers['x-haproxy-server-state'].match(regex);
         if (match) {haName = match[1];}
+        isFailoverCheck = true;
+    // Check for HAProxy Node Group and Node Id
+    } else if (req.params.nodeGroup && req.params.nodeId) {
+        haName = req.params.nodeGroup + '/' + req.params.nodeId;
+    // Check for mining address
+    } else if (req.params.miningAddress) {
+        haName = req.params.miningAddress;
+        isMiningAddress = true;
     } else {
-        haName = req.query.haname;
-        if (!haName){
-            log('warn', logSystem, 'Request is missing header x-haproxy-server-state or haName query', []);
-            res.writeHead(400, {'Content-Type': 'text/html'});
-            res.write(`Request is missing header x-haproxy-server-state or haName query`);
-            res.end();
-            return;
-        }
+        log('warn', logSystem, 'Request is missing header x-haproxy-server-state or params', []);
+        res.writeHead(400, {'Content-Type': 'text/html'});
+        res.write(`Request is missing header x-haproxy-server-state or haName query`);
+        res.end();
+        return;
     }
 
-    /* Make sure the host header is present in the defined hosts in config */
-    if (!isValidhaName(haName)) {
-        log('info', logSystem, 'Request for haName: %s, is invalid', [host]);
+    /* Make sure the host header is present in the defined hosts in config or we have a valid miningAddress */
+    if ((!isValidhaName(haName) && !isMiningAddress) || (!isValidMiningAddress(haName) && isMiningAddress)) {
+        log('info', logSystem, 'Request for haName: %s, is invalid', [haName]);
         res.writeHead(400, {'Content-Type': 'text/html'});
-        res.write(`Specified host (${haName}) is not present in config!`);
+        res.write(`Specified name (${haName}) is not valid!`);
         res.end();
         return;
     }
@@ -98,11 +106,16 @@ function haCheckHandler(req, res) {
     const modeData = mode(globals.networkPools.map(x => x.height));
     const modeHeight = modeData.mode;
 
-    /* The host making the requests info */
-    const currentDaemon = globals.serviceNodes.find(x => x.haName === haName);
+    var currentDaemon;
+
+    if (!isMiningAddress) {
+        currentDaemon = globals.serviceNodes.find(x => x.haName === haName);
+    } else {
+        currentDaemon = globals.networkPools.find(x => x.miningAddress === haName);
+    }
 
     const deviance = Math.abs(modeHeight - currentDaemon.height);
-    const status = deviance <= config.serviceNodeMaxDeviance;
+    const status = (isFailoverCheck) ? deviance <= config.serviceNodeMaxFailoverDeviance : deviance <= config.serviceNodeMaxAlertDeviance;
     const statusDescription = (status) ? "UP" : "DOWN";
     const statusCode = (status) ? 200 : 503;
 
@@ -122,9 +135,17 @@ function isValidhaName(haName) {
     ) !== -1;
 }
 
+function isValidMiningAddress(miningAddress) {
+    return globals.networkPools.findIndex(
+        pool => pool.miningAddress === miningAddress
+    ) !== -1;
+}
+
 function launchServer() {
     const server = express();
     server.get('/hacheck', haCheckHandler);
+    server.get('/hacheck/miningaddress/:miningAddress', haCheckHandler);
+    server.get('/hacheck/:nodeGroup/:nodeId', haCheckHandler);
     server.get('/heights', heightsHandler);
     server.listen(config.serverPort);
 }
@@ -165,6 +186,7 @@ function updateNetworkPools(callback) {
         /* Update the modeHeight of each entry with this new height */
         globals.networkPools = results.map(entry => {
             entry.mode = modeHeight;
+            entry.status = (Math.abs(modeHeight - entry.height) <= config.serviceNodeMaxAlertDeviance) ? "UP" : "DOWN";
             return entry;
         });
 
@@ -236,14 +258,16 @@ function getForknotePoolInfo(pool, callback) {
         const lastFound = json.pool.lastBlockFound == 0 ? 'Never' : json.pool.lastBlockFound;
 
         return callback(null, {
+            name: pool.name,
             url: pool.url,
+            api: pool.api,
+            type: pool.type,
+            miningAddress: pool.miningAddress,
             height: json.network.height,
             estimatedSolveTime: estimatedSolveTime,
             lastFound: lastFound,
-            /* We're not filling this in yet - we want to use all the height
-               values we just calculated, so lets fill it in once we're done
-               with this. */
-            mode: undefined
+            mode: undefined,
+            status: undefined
         });
     });
 }
@@ -260,11 +284,16 @@ function getNodeJSPoolInfo(pool, callback) {
                 return callback(null, null);
             }
             return callback(null, {
+                name: pool.name,
                 url: pool.url,
+                api: pool.api,
+                type: pool.type,
+                miningAddress: pool.miningAddress,
                 height: networkJSON.height,
                 estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
                 lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
-                mode: undefined
+                mode: undefined,
+                status: undefined
             });
         });
     });
@@ -287,7 +316,7 @@ function getServiceNodeHeight(serviceNode, callback) {
     daemon.getHeight().then((node) => {
         return callback(null, {haName: serviceNode.haName, height: node.height, error: false});
     }).catch((err) => {        
-        log('info', logSystem, 'Failed to get height from %s %s:%s, reason: %s', [serviceNode.haName, serviceNode.node.host, serviceNode.node.port, err]);
+        log('warn', logSystem, 'Failed to get height from %s %s:%s, reason: %s', [serviceNode.haName, serviceNode.node.host, serviceNode.node.port, err]);
         return callback(null, {haName: serviceNode.haName, height: 0, error: true});
     });
 }

@@ -3,16 +3,24 @@ var config = {};
 /* A mapping of host headings to daemon IP's */
 config.serviceNodes = [
     /* Of course these are just examples */
-    {haName: "nodes/node-a", node: {host: "127.0.0.1", port: "13898"}},
-    {haName: "nodes/node-b", node: {host: "127.0.0.1", port: "12898"}},
+    {haName: "nodes/node-a", node: {host: "127.0.0.1", port: "12898"}},
+    {haName: "nodes/node-b", node: {host: "127.0.0.1", port: "13898"}},
 ];
 
 /* The port to run the server on */
 config.serverPort = 8080;
 
-/* The max amount of blocks a local daemon can be away from the median before
-   reporting it has de-synced */
-config.serviceNodeMaxDeviance = 10;
+/* The max amount of blocks a service node can be away from the median before
+   reporting it has de-synced. This is used with x-haproxy-server-state header
+   to control the HAProxy failover point
+*/
+config.serviceNodeMaxFailoverDeviance = 10;
+
+/* The max amount of blocks a service node can be away from the median before
+   reporting it has de-synced. This is used with url quieres for services like
+   uptime robot, pingdom, monitority.
+*/
+config.serviceNodeMaxAlertDeviance = 5;
 
 /* The max amount of blocks a network daemon can be away from the median before
    reporting it has de-synced
