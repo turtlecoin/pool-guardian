@@ -104,7 +104,7 @@ function haCheckHandler(req, res) {
         return;
     }
 
-    /* Get mode height and compare to reuested daemon or pool */
+    /* Get mode height and compare to requested daemon or pool */
     const modeData = mode(globals.networkPools.map(x => x.height));
     const modeHeight = modeData.mode;
     const currentDaemon = isMiningAddress ? globals.networkPools.find(x => x.miningAddress === haName) : globals.serviceNodes.find(x => x.haName === haName);
