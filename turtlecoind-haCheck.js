@@ -71,6 +71,8 @@ function haCheckHandler(req, res) {
     var isMiningAddress = false;
     var isFailoverCheck = false;
 
+    const dateNowSeconds = Date.now() / 1000 | 0;
+
     // HAProxy server headers take precedence
     if (req.headers['x-haproxy-server-state']) {
         log('info', logSystem, 'x-haproxy-server-state: %s', [req.headers['x-haproxy-server-state']]);
@@ -86,14 +88,14 @@ function haCheckHandler(req, res) {
         haName = req.params.miningAddress;
         isMiningAddress = true;
     } else {
-        log('warn', logSystem, 'Request is missing header x-haproxy-server-state or params', []);
+        log('warn', logSystem, 'Request is missing x-haproxy-server-state header or params', []);
         res.writeHead(400, {'Content-Type': 'text/html'});
-        res.write(`Request is missing header x-haproxy-server-state or haName query`);
+        res.write(`Request is missing x-haproxy-server-state header or params`);
         res.end();
         return;
     }
 
-    /* Make sure the host header is present in the defined hosts in config or we have a valid miningAddress */
+    /* Make sure the x-haproxy-server-state header is present and is a defined haName in the config or we have a valid miningAddress */
     if ((!isValidhaName(haName) && !isMiningAddress) || (!isValidMiningAddress(haName) && isMiningAddress)) {
         log('info', logSystem, 'Request for haName: %s, is invalid', [haName]);
         res.writeHead(400, {'Content-Type': 'text/html'});
@@ -102,26 +104,42 @@ function haCheckHandler(req, res) {
         return;
     }
 
-    /* Get mode height and compare to the rest of the pools */
+    /* Get mode height and compare to reuested daemon or pool */
     const modeData = mode(globals.networkPools.map(x => x.height));
     const modeHeight = modeData.mode;
+    const currentDaemon = isMiningAddress ? globals.networkPools.find(x => x.miningAddress === haName) : globals.serviceNodes.find(x => x.haName === haName);
+    const failureDeviance = (req.params.deviance !== undefined) ? parseInt(req.params.deviance) : (isFailoverCheck) ? config.serviceNodeMaxFailoverDeviance : config.serviceNodeMaxAlertDeviance;
+    const deviance = Math.abs(modeHeight - currentDaemon.height);
 
-    var currentDaemon;
+    var status;
 
-    if (!isMiningAddress) {
-        currentDaemon = globals.serviceNodes.find(x => x.haName === haName);
+    if (modeData.consensus >= config.minActionableModeConsensusPercent) {
+        status = deviance <= failureDeviance;
+    } else if (currentDaemon.height == 0 || dateNowSeconds - currentDaemon.lastChange > config.minActionableNonConsensusSeconds) {
+        status = false;
     } else {
-        currentDaemon = globals.networkPools.find(x => x.miningAddress === haName);
+        status = true;
     }
 
-    const deviance = Math.abs(modeHeight - currentDaemon.height);
-    const status = (isFailoverCheck) ? deviance <= config.serviceNodeMaxFailoverDeviance : deviance <= config.serviceNodeMaxAlertDeviance;
     const statusDescription = (status) ? "UP" : "DOWN";
     const statusCode = (status) ? 200 : 503;
 
-    log('info', logSystem, 'Request for haName: %s , Mode height: %s , Mode valid: %s , Mode invalid: %s , Daemon Height: %s , Deviance: %s , Status: %s', [haName, modeHeight, modeData.valid, modeData.invalid, currentDaemon.height, deviance, statusDescription]);
+    log('info', logSystem, 'Request for haName: %s , Status: %s , Mode height: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\% , Daemon Height: %s , Deviance: %s , Failure deviance: %s , Last Change: %s , Last update: %s',
+        [haName, statusDescription, modeHeight, modeData.valid, modeData.invalid, modeData.consensus, currentDaemon.height, deviance, failureDeviance, dateNowSeconds - currentDaemon.lastChange, dateNowSeconds - currentDaemon.updated]);
 
-    const response = JSON.stringify({haName: haName, modeHeight: modeHeight, daemonHeight: currentDaemon.height, deviance: deviance, status: statusDescription});
+    const response = JSON.stringify({
+        haName: haName,
+        status: statusDescription,
+        modeHeight: modeHeight,
+        modeValid: modeData.valid,
+        modeInvalid: modeData.invalid,
+        modeConsensus: modeData.consensus,
+        daemonHeight: currentDaemon.height,
+        deviance: deviance,
+        failureDeviance: failureDeviance,
+        lastChange: dateNowSeconds - currentDaemon.lastChange,
+        updated: dateNowSeconds - currentDaemon.updated
+    });
 
     res.writeHead(statusCode, {'Content-Type': 'text/html'});
     res.write(response);
@@ -144,23 +162,59 @@ function isValidMiningAddress(miningAddress) {
 function launchServer() {
     const server = express();
     server.get('/hacheck', haCheckHandler);
+    server.get('/hacheck/:deviance([0-9]+)', haCheckHandler);
     server.get('/hacheck/miningaddress/:miningAddress', haCheckHandler);
+    server.get('/hacheck/miningaddress/:miningAddress/:deviance([0-9]+)', haCheckHandler);
     server.get('/hacheck/:nodeGroup/:nodeId', haCheckHandler);
+    server.get('/hacheck/:nodeGroup/:nodeId/:deviance([0-9]+)', haCheckHandler);
     server.get('/heights', heightsHandler);
+    server.get('/heights/:deviance([0-9]+)', heightsHandler);
     server.listen(config.serverPort);
 }
 
 function heightsHandler(req, res) {
+    var networkPools;
+    const dateNowSeconds = Date.now() / 1000 | 0;
+
+    const modeData = mode(globals.networkPools.map(x => x.height));
+
+    if (req.params.deviance !== undefined){
+        const failureDeviance = parseInt(req.params.deviance);
+        networkPools = JSON.parse(JSON.stringify(globals.networkPools)).map(entry => {
+
+            if (modeData.consensus >= config.minActionableModeConsensusPercent) {
+                entry.status = (Math.abs(entry.mode - entry.height) <= failureDeviance) ? "UP" : "DOWN";
+            } else if (entry.height == 0 || dateNowSeconds - entry.lastChange > config.minActionableNonConsensusSeconds) {
+                entry.status = false;
+            } else {
+                entry.status = true;
+            }
+
+            return entry;
+        });
+    } else {
+        networkPools = globals.networkPools;
+    }
+
     res.writeHead(200, {'Content-Type': 'application/json'});
-    res.write(JSON.stringify(globals.networkPools));
+    res.write(JSON.stringify(networkPools));
     res.end();
 }
 
 function updateServiceNodes(callback) {
     async.map(config.serviceNodes, getServiceNodeHeight, function(err, promises) {
         Promise.all(promises).then(results => {
-            globals.serviceNodes = results
-            log('info', logSystem, 'Updated service nodes. Success: %s, Fail: %s', [results.length, results.filter(val => val.error == true).length]);
+            globals.serviceNodes = results.map(entry => {
+                var index = (globals.serviceNodes !== undefined) ? globals.serviceNodes.findIndex(node => node.haName === entry.haName) : -1;
+                if (index != -1 && entry.height == globals.serviceNodes[index].height) {
+                     entry.lastChange = globals.serviceNodes[index].lastChange;
+                }
+
+                return entry;
+            });
+
+            const failedCount =  results.filter(val => val.error == true).length
+            log('info', logSystem, 'Updated service nodes. Total: %s , Success: %s , Fail: %s', [results.length, results.length - failedCount, failedCount]);
             if (callback) {
                 callback();
             }
@@ -172,6 +226,7 @@ function updateNetworkPools(callback) {
     const supportedPools = globals.networkPoolList.pools.filter(isSupportedPool)
     async.map(supportedPools, getPoolInfo, function(err, results) {
 
+        const dateNowSeconds = Date.now() / 1000 | 0;
         const poolTotal = results.length;
 
         /* Filter null values (i.e. pools which failed to parse) */
@@ -187,10 +242,15 @@ function updateNetworkPools(callback) {
         globals.networkPools = results.map(entry => {
             entry.mode = modeHeight;
             entry.status = (Math.abs(modeHeight - entry.height) <= config.serviceNodeMaxAlertDeviance) ? "UP" : "DOWN";
+            var index = (globals.networkPools !== undefined) ? globals.networkPools.findIndex(pool => pool.name === entry.name) : -1;
+            if (index != -1 && entry.height == globals.networkPools[index].height) {
+                 entry.lastChange = globals.networkPools[index].lastChange;
+            }
+
             return entry;
         });
 
-        log('info', logSystem, 'Updated network pools. Success: %s , Fail: %s , Total: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s', [poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid]);
+        log('info', logSystem, 'Updated network pools. Success: %s , Fail: %s , Total: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\%', [poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid, modeData.consensus]);
 
         if (callback) {
             callback();
@@ -252,6 +312,8 @@ function getForknotePoolInfo(pool, callback) {
             return callback(null, null);
         }
 
+        const dateNowSeconds = Date.now() / 1000 | 0;
+
         /* Don't divide by zero */
         const estimatedSolveTime = json.pool.hashrate == 0 ? 'Never' : json.network.difficulty / json.pool.hashrate;
 
@@ -267,7 +329,9 @@ function getForknotePoolInfo(pool, callback) {
             estimatedSolveTime: estimatedSolveTime,
             lastFound: lastFound,
             mode: undefined,
-            status: undefined
+            status: undefined,
+            lastChange: dateNowSeconds,
+            updated: dateNowSeconds
         });
     });
 }
@@ -283,6 +347,9 @@ function getNodeJSPoolInfo(pool, callback) {
                 log('warn', logSystem, 'Failed to get pool info for: %s', [pool.api]);
                 return callback(null, null);
             }
+
+            const dateNowSeconds = Date.now() / 1000 | 0;
+
             return callback(null, {
                 name: pool.name,
                 url: pool.url,
@@ -293,7 +360,9 @@ function getNodeJSPoolInfo(pool, callback) {
                 estimatedSolveTime: networkJSON.difficulty / poolJSON.pool_statistics.hashRate,
                 lastFound: secsSinceLastBlock(poolJSON.pool_statistics.lastBlockFound),
                 mode: undefined,
-                status: undefined
+                status: undefined,
+                lastChange: dateNowSeconds,
+                updated: dateNowSeconds
             });
         });
     });
@@ -312,12 +381,14 @@ function getServiceNodeHeight(serviceNode, callback) {
         timeout: config.serviceNodeTimeout * 1000
     });
 
+    const dateNowSeconds = Date.now() / 1000 | 0;
+
     /* Get the height if we can */
     daemon.getHeight().then((node) => {
-        return callback(null, {haName: serviceNode.haName, height: node.height, error: false});
+        return callback(null, {haName: serviceNode.haName, height: node.height, lastChange: dateNowSeconds, updated: dateNowSeconds, error: false});
     }).catch((err) => {        
         log('warn', logSystem, 'Failed to get height from %s %s:%s, reason: %s', [serviceNode.haName, serviceNode.node.host, serviceNode.node.port, err]);
-        return callback(null, {haName: serviceNode.haName, height: 0, error: true});
+        return callback(null, {haName: serviceNode.haName, height: 0, lastChange: dateNowSeconds, updated: dateNowSeconds, error: true});
     });
 }
 
@@ -354,13 +425,18 @@ function mode(arr) {
             return;
         }
 
-        numMapping[number] = (numMapping[number] || 0) + 1;
+        for(var i = number - config.modeFuzzing; i <= number + config.modeFuzzing; i++) {
+            numMapping[i] = (numMapping[i] || 0) + 1;
 
-        if (greatestFreq < numMapping[number]) {
-            greatestFreq = numMapping[number];
-            mode = number;
+            if (greatestFreq < numMapping[i]) {
+                greatestFreq = numMapping[i];
+                mode = i;
+            }
         }
+
     });
 
-    return {mode: mode, valid: arr.length - invalidCount, invalid: invalidCount};
+    const validCount = arr.length - invalidCount;
+    const consensusPercent = (Math.round((greatestFreq / validCount * 100) * 100) / 100).toFixed(2);
+    return {mode: mode, total: arr.length, valid: validCount, invalid: invalidCount, consensus: consensusPercent};
 }
