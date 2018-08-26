@@ -71,6 +71,7 @@ function haCheckHandler(req, res) {
     var isMiningAddress = false;
     var isFailoverCheck = false;
 
+    const requestIP = req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.ip;
     const dateNowSeconds = Date.now() / 1000 | 0;
 
     // HAProxy server headers take precedence
@@ -124,8 +125,8 @@ function haCheckHandler(req, res) {
     const statusDescription = (status) ? "UP" : "DOWN";
     const statusCode = (status) ? 200 : 503;
 
-    log('info', logSystem, 'Request for haName: %s , Status: %s , Mode height: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\% , Daemon Height: %s , Deviance: %s , Failure deviance: %s , Last Change: %s , Last update: %s',
-        [haName, statusDescription, modeHeight, modeData.valid, modeData.invalid, modeData.consensus, currentDaemon.height, deviance, failureDeviance, dateNowSeconds - currentDaemon.lastChange, dateNowSeconds - currentDaemon.updated]);
+    log('info', logSystem, 'Request for haName: %s , Status: %s , Mode height: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\% , Daemon Height: %s , Deviance: %s , Failure deviance: %s , Last Change: %s , Last update: %s , Request IP: %s',
+        [haName, statusDescription, modeHeight, modeData.valid, modeData.invalid, modeData.consensus, currentDaemon.height, deviance, failureDeviance, dateNowSeconds - currentDaemon.lastChange, dateNowSeconds - currentDaemon.updated, requestIP]);
 
     const response = JSON.stringify({
         haName: haName,
@@ -138,7 +139,8 @@ function haCheckHandler(req, res) {
         deviance: deviance,
         failureDeviance: failureDeviance,
         lastChange: dateNowSeconds - currentDaemon.lastChange,
-        updated: dateNowSeconds - currentDaemon.updated
+        updated: dateNowSeconds - currentDaemon.updated,
+        requestIP: requestIP
     });
 
     res.writeHead(statusCode, {'Content-Type': 'text/html'});
@@ -174,6 +176,7 @@ function launchServer() {
 
 function heightsHandler(req, res) {
 
+    const requestIP = req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.ip;
     const dateNowSeconds = Date.now() / 1000 | 0;
     const modeData = mode(globals.networkPools.map(x => x.height));
     const failureDeviance = (req.params.deviance !== undefined) ? parseInt(req.params.deviance) : config.serviceNodeMaxAlertDeviance;
@@ -183,13 +186,16 @@ function heightsHandler(req, res) {
         if (modeData.consensus >= config.minActionableModeConsensusPercent) {
             entry.status = (Math.abs(entry.mode - entry.height) <= failureDeviance) ? "UP" : "DOWN";
         } else if (entry.height == 0 || dateNowSeconds - entry.lastChange > config.minActionableNonConsensusSeconds) {
-            entry.status = false;
+            entry.status = "DOWN";
         } else {
-            entry.status = true;
+            entry.status = "UP";
         }
-
         return entry;
     });
+
+    const failedCount =  networkPools.filter(val => val.status == "DOWN").length
+    log('info', logSystem, 'Request for /heights Total: %s , Up: %s , Down: %s , Failure Deviance: %s , Mode height: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\% , Request IP: %s',
+        [networkPools.length, networkPools.length - failedCount, failedCount, failureDeviance, modeData.mode, modeData.valid, modeData.invalid, modeData.consensus, requestIP]);
 
     res.writeHead(200, {'Content-Type': 'application/json'});
     res.write(JSON.stringify(networkPools));
