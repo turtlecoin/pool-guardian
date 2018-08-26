@@ -173,28 +173,23 @@ function launchServer() {
 }
 
 function heightsHandler(req, res) {
-    var networkPools;
+
     const dateNowSeconds = Date.now() / 1000 | 0;
-
     const modeData = mode(globals.networkPools.map(x => x.height));
+    const failureDeviance = (req.params.deviance !== undefined) ? parseInt(req.params.deviance) : config.serviceNodeMaxAlertDeviance;
 
-    if (req.params.deviance !== undefined){
-        const failureDeviance = parseInt(req.params.deviance);
-        networkPools = JSON.parse(JSON.stringify(globals.networkPools)).map(entry => {
+    const networkPools = JSON.parse(JSON.stringify(globals.networkPools)).map(entry => {
 
-            if (modeData.consensus >= config.minActionableModeConsensusPercent) {
-                entry.status = (Math.abs(entry.mode - entry.height) <= failureDeviance) ? "UP" : "DOWN";
-            } else if (entry.height == 0 || dateNowSeconds - entry.lastChange > config.minActionableNonConsensusSeconds) {
-                entry.status = false;
-            } else {
-                entry.status = true;
-            }
+        if (modeData.consensus >= config.minActionableModeConsensusPercent) {
+            entry.status = (Math.abs(entry.mode - entry.height) <= failureDeviance) ? "UP" : "DOWN";
+        } else if (entry.height == 0 || dateNowSeconds - entry.lastChange > config.minActionableNonConsensusSeconds) {
+            entry.status = false;
+        } else {
+            entry.status = true;
+        }
 
-            return entry;
-        });
-    } else {
-        networkPools = globals.networkPools;
-    }
+        return entry;
+    });
 
     res.writeHead(200, {'Content-Type': 'application/json'});
     res.write(JSON.stringify(networkPools));
@@ -241,7 +236,6 @@ function updateNetworkPools(callback) {
         /* Update the modeHeight of each entry with this new height */
         globals.networkPools = results.map(entry => {
             entry.mode = modeHeight;
-            entry.status = (Math.abs(modeHeight - entry.height) <= config.serviceNodeMaxAlertDeviance) ? "UP" : "DOWN";
             var index = (globals.networkPools !== undefined) ? globals.networkPools.findIndex(pool => pool.name === entry.name) : -1;
             if (index != -1 && entry.height == globals.networkPools[index].height) {
                  entry.lastChange = globals.networkPools[index].lastChange;
