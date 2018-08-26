@@ -9,7 +9,6 @@ require('./logger.js');
 var logSystem = 'master';
 require('./exceptionWriter.js')(logSystem);
 
-
 if (cluster.isWorker){
     switch(process.env.workerType){
         case 'turtlecoind-haCheck':
@@ -19,11 +18,9 @@ if (cluster.isWorker){
     return;
 }
 
-
 (function init() {
   spawnWorker()
 })();
-
 
 function spawnWorker() {
 
