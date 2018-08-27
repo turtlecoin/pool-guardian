@@ -33,7 +33,7 @@ By default the server listens on 8080, but this can be changed in the config.
 
 Notes:
 * `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it.
-* Note: All endpoints accept an additional parameter `/<failureDeviance>` which is an integer, and overrides the default failure deviance from the config.js file.
+* All endpoints accept an additional parameter `/<failureDeviance>` which is an integer, and overrides the default failure deviance from the config.js file.
 
 ## Configuring
 
@@ -41,7 +41,7 @@ All configurable settings are available in config.js, and are all commented with
 
 You probably want to be looking at config.serviceNodes initially.
 
-* Example Configuration based on Ubuntu 16.04 for simple single daemon (and/or pool) monitoring with alerts:
+### Example Configuration based on Ubuntu 16.04 for simple single daemon (and/or pool) monitoring with alerts
 
 (This configuration assumes both this app and the daemon are running on the same host, and the daemon is running using the default rpc port 11898)
 
@@ -117,7 +117,7 @@ pool: http://trtl-check.yourpool.com/hacheck/miningaddress/<your_mining_address>
 (note: The mining address must exactly match your mining address from here: https://raw.githubusercontent.com/turtlecoin/turtlecoin-pools-json/master/v2/turtlecoin-pools.json)
 
 
-* Example Configuration based on Ubuntu 16.04 for multi-daemon proxy with failover:
+### Example Configuration based on Ubuntu 16.04 for multi-daemon proxy with failover
 
 * Install HAProxy:
 
