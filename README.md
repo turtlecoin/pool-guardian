@@ -15,7 +15,12 @@ Can also be used just for monitoring and alerts with uptime robot, monitority, p
 
 ## Running
 
-`node init.js`
+```
+git clone https://github.com/turtlecoin/pool-guardian.git
+cd pool-guardian
+npm i
+node init.js
+```
 
 By default the server listens on 8080, but this can be changed in the config.
 
@@ -27,6 +32,7 @@ By default the server listens on 8080, but this can be changed in the config.
 * `/hacheck/miningaddress/<poolMiningAddress>` - Compares the pool mining address passed in url to other network pools, and returns a 200 code if it is within 5 blocks of the mode height, of a 503 code if not. Designed for monitoring services (uptime robot, monitority, pingdom, etc..)
 
 Note: `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it.
+Note: All endpoints accept an additional parameter /<failureDeviance> which is an integer, which overrides the default failure deviance from the config.js file.
 
 ## Configuring
 
@@ -34,7 +40,80 @@ All configurable settings are available in config.js, and are all commented with
 
 You probably want to be looking at config.serviceNodes initially.
 
-Example Configuration based on Ubuntu 16.04.
+* Example Configuration based on Ubuntu 16.04 for simple single daemon (and/or pool) monitoring with alerts:
+
+(This configuration assumes both this app and the daemon are running on the same host, and the daemon is running using the default rpc port 11898)
+
+Install this app:
+
+```
+git clone https://github.com/turtlecoin/pool-guardian.git
+cd pool-guardian
+npm i
+```
+
+Edit `config.js` and change `config.serviceNodes` to:
+
+config.serviceNodes = [
+    {haName: "nodes/node-a", node: {host: "127.0.0.1", port: "11898"}}
+];
+
+This is all that is necessary, however a few additional steps can make things easier.
+
+Add a dns entry for this server with your dns provider, for example: trtl-check.yourpool.com
+
+Update Nginx to proxy trtl-check.yourpool.com to the default 8080 port of this app:
+(If you choose not to do this, open port 8080 in your firewall so that this app can be reached by monitoring services, and your montoring will be reached at http://www.yourpool.com:8080/)
+
+Edit the Nginx config:
+
+`nano /etc/nginx/sites-available/default`
+
+At the bottom add (replace trtl-check.yourpool.com with what you used for your dns entry):
+
+```
+server {
+  charset utf-8;
+  listen 80;
+  listen [::]:80;
+  server_name trtl-check.yourpool.com;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+  }
+}
+```
+
+Restart Nginx:
+
+`sudo systemctl restart nginx`
+
+Start this app:
+
+`node init.js`
+
+Your daemon and/or pool can now me monitored by url monitoring services, for example http://www.uptimedoctor.com:
+
+The url's to monitor are:
+
+```
+daemon: http://trtl-check.yourpool.com/hacheck/nodes/node-a
+pool: http://trtl-check.yourpool.com/hacheck/miningaddress/<your_mining_address>
+```
+
+you may also choose to monitor at differnent deviances, for example if your pool or daemon is only 5 blocks ahead or behind:
+
+```
+daemon: http://trtl-check.yourpool.com/hacheck/nodes/node-a/5
+pool: http://trtl-check.yourpool.com/hacheck/miningaddress/<your_mining_address>/5
+```
+
+(note: The mining address must exactly match your mining address from here: https://raw.githubusercontent.com/turtlecoin/turtlecoin-pools-json/master/v2/turtlecoin-pools.json)
+
+
+* Example Configuration based on Ubuntu 16.04 for multi-daemon proxy with failover:
 
 * Install HAProxy:
 
