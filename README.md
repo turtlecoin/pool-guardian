@@ -31,8 +31,9 @@ By default the server listens on 8080, but this can be changed in the config.
 * `/hacheck/<nodeGroup>/<nodeId>` - Compares the daemon passed in url to other network pools, and returns a 200 code if it is within 5 blocks of the mode height, of a 503 code if not. Designed for monitoring services (uptime robot, monitority, pingdom, etc..)
 * `/hacheck/miningaddress/<poolMiningAddress>` - Compares the pool mining address passed in url to other network pools, and returns a 200 code if it is within 5 blocks of the mode height, of a 503 code if not. Designed for monitoring services (uptime robot, monitority, pingdom, etc..)
 
-Note: `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it.
-Note: All endpoints accept an additional parameter /<failureDeviance> which is an integer, which overrides the default failure deviance from the config.js file.
+Notes:
+* `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it.
+* Note: All endpoints accept an additional parameter `/<failureDeviance>` which is an integer, and overrides the default failure deviance from the config.js file.
 
 ## Configuring
 
@@ -54,15 +55,18 @@ npm i
 
 Edit `config.js` and change `config.serviceNodes` to:
 
+```
 config.serviceNodes = [
     {haName: "nodes/node-a", node: {host: "127.0.0.1", port: "11898"}}
 ];
+```
 
 This is all that is necessary, however a few additional steps can make things easier.
 
 Add a dns entry for this server with your dns provider, for example: trtl-check.yourpool.com
 
 Update Nginx to proxy trtl-check.yourpool.com to the default 8080 port of this app:
+
 (If you choose not to do this, open port 8080 in your firewall so that this app can be reached by monitoring services, and your montoring will be reached at http://www.yourpool.com:8080/)
 
 Edit the Nginx config:
@@ -103,7 +107,7 @@ daemon: http://trtl-check.yourpool.com/hacheck/nodes/node-a
 pool: http://trtl-check.yourpool.com/hacheck/miningaddress/<your_mining_address>
 ```
 
-you may also choose to monitor at differnent deviances, for example if your pool or daemon is only 5 blocks ahead or behind:
+you may also choose to monitor at differnent deviances, for example if your pool or daemon is only 5 blocks ahead or behind, receive an alert:
 
 ```
 daemon: http://trtl-check.yourpool.com/hacheck/nodes/node-a/5
@@ -141,9 +145,11 @@ nano /etc/haproxy/haproxy.cfg
 
 * At the bottom of haproxy.cfg add:
 
-* (This configuration assumes you have 2 daemons running on local host at ports 12898 and 13898, and this app is reachable at hacheck.yoursite.com:8080, and your proxied high availablity daemons will be reached on port 11898)
+Notes:
 
-* (Note below that 'nodes' and 'node-a' and 'node-b' correspond to entries in default config.js, config.serviceNodes variable as nodes/node-a and nodes/node-b and are passed to the app by HAProxy to identify these daemons.)
+* This configuration assumes you have 2 daemons running on local host at ports 12898 and 13898, and this app is reachable at hacheck.yoursite.com:8080, and your proxied high availablity daemons will be reached on port 11898.
+
+* Note below that 'nodes' and 'node-a' and 'node-b' correspond to entries in default config.js, config.serviceNodes variable as nodes/node-a and nodes/node-b and are passed to the app by HAProxy to identify these daemons.
 
 ```
 listen nodes
