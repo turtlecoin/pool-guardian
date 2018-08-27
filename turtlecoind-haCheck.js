@@ -250,7 +250,8 @@ function updateNetworkPools(callback) {
             return entry;
         });
 
-        log('info', logSystem, 'Updated network pools. Success: %s , Fail: %s , Total: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\%', [poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid, modeData.consensus]);
+        log('info', logSystem, 'Updated network pools. Total: %s , Success: %s , Fail: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\%',
+            [globals.networkPoolList.pools.length, poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid, modeData.consensus]);
 
         if (callback) {
             callback();

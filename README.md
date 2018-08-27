@@ -158,6 +158,10 @@ listen nodes
     server node-b 127.0.0.1:13898 check backup port 8080 inter 15s fall 40 rise 2
 ```
 
+`inter 15s fall 40 rise 2` will check the daemons every 15 seconds and mark it as down after 40 failures (10 minutes) and mark it as up after 2 successful checks.
+
+Check the HAProxy manual for advanced configuration options: https://cbonte.github.io/haproxy-dconv/1.7/configuration.html
+
 * Test HAProxy config:
 
 ```
