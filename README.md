@@ -9,20 +9,17 @@ Can also be used just for monitoring and alerts with uptime robot, monitority, p
 * npm
 * nodejs
 
-## Fetching dependencies
-
-`npm install`
-
-## Running
+## Setup
 
 ```
 git clone https://github.com/turtlecoin/pool-guardian.git
 cd pool-guardian
-npm i
-node init.js
+npm install
 ```
 
-By default the server listens on 8080, but this can be changed in the config.
+* The app can be launched with `node init.js`
+
+By default the server listens on 8080, but this can be changed in the config.js
 
 ## Endpoints
 
@@ -32,8 +29,8 @@ By default the server listens on 8080, but this can be changed in the config.
 * `/hacheck/miningaddress/<poolMiningAddress>` - Compares the pool mining address passed in url to other network pools, and returns a 200 code if it is within 5 blocks of the mode height, of a 503 code if not. Designed for monitoring services (uptime robot, monitority, pingdom, etc..)
 
 Notes:
-* `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it.
-* All endpoints accept an additional parameter `/<failureDeviance>` which is an integer, and overrides the default failure deviance from the config.js file.
+* `/hacheck/<nodeGroup>/<nodeId>` queries for a specific daemon, and `/hacheck/miningaddress/<poolMiningAddress>` queries the pool directly, and in effect whatever daemon is currently active on it, additionally this is also testing if your pool API is responisve.
+* All endpoints accept an additional parameter `/<failureDeviance>` which is an integer, and overrides the default failure deviance from the config.js file. For example, `/heights/10` or `/hacheck/<nodeGroup>/<nodeId>/15`
 
 ## Configuring
 
@@ -147,7 +144,7 @@ nano /etc/haproxy/haproxy.cfg
 
 Notes:
 
-* This configuration assumes you have 2 daemons running on local host at ports 12898 and 13898, and this app is reachable at hacheck.yoursite.com:8080, and your proxied high availablity daemons will be reached on port 11898.
+* This configuration assumes you have 2 daemons running on local host at ports 12898 and 13898, and this app is reachable at trtl-check.yourpool.com:8080, and your proxied high availablity daemons will be reached on port 11898.
 
 * Note below that 'nodes' and 'node-a' and 'node-b' correspond to entries in default config.js, config.serviceNodes variable as nodes/node-a and nodes/node-b and are passed to the app by HAProxy to identify these daemons.
 
@@ -155,7 +152,7 @@ Notes:
 listen nodes
     bind *:11898
     option forwardfor
-    option httpchk GET /hacheck "HTTP/1.0\r\nHost: hacheck.yoursite.com"
+    option httpchk GET /hacheck "HTTP/1.0\r\nHost: trtl-check.yourpool.com"
     http-check send-state
     server node-a 127.0.0.1:12898 check port 8080 inter 15s fall 40 rise 2
     server node-b 127.0.0.1:13898 check backup port 8080 inter 15s fall 40 rise 2
