@@ -29,13 +29,13 @@ config.serviceNodeMaxAlertDeviance = 5;
 config.networkDaemonMaxDeviance = 10;
 */
 
-/* Seconds to wait for a response from a local daemon before giving up*/
+/* Seconds to wait for a response from a service node before giving up*/
 config.serviceNodeTimeout = 10;
 
 /* Seconds to wait for a response from a network daemon before giving up*/
 config.networkPoolTimeout = 10;
 
-/* How often should we poll our local pool daemons? (in seconds) */
+/* How often should we poll our service nodes? (in seconds) */
 config.serviceNodeRefreshRate = 30;
 
 /* How often should we poll the network daemons? (from the JSON url)

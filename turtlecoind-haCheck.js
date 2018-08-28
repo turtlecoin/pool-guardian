@@ -97,7 +97,7 @@ function haCheckHandler(req, res) {
     }
 
     /* Make sure the x-haproxy-server-state header is present and is a defined haName in the config or we have a valid miningAddress */
-    if ((!isValidhaName(haName) && !isMiningAddress) || (!isValidMiningAddress(haName) && isMiningAddress)) {
+    if (!isMiningAddress && (!isValidhaName(haName)) || (isMiningAddress && (!isValidMiningAddress(haName)))) {
         log('info', logSystem, 'Request for haName: %s, is invalid', [haName]);
         res.writeHead(400, {'Content-Type': 'text/html'});
         res.write(`Specified name (${haName}) is not valid!`);
@@ -250,7 +250,8 @@ function updateNetworkPools(callback) {
             return entry;
         });
 
-        log('info', logSystem, 'Updated network pools. Success: %s , Fail: %s , Total: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\%', [poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid, modeData.consensus]);
+        log('info', logSystem, 'Updated network pools. Total: %s , Success: %s , Fail: %s , Unsupported: %s , Mode: %s , Mode valid: %s , Mode invalid: %s , Mode Consensus: %s\%',
+            [globals.networkPoolList.pools.length, poolTotal - poolFailed, poolFailed, globals.networkPoolList.pools.length - supportedPools.length, modeHeight, modeData.valid, modeData.invalid, modeData.consensus]);
 
         if (callback) {
             callback();
@@ -416,15 +417,10 @@ function mode(arr) {
     var numMapping = {};
     var greatestFreq = 0;
     var mode = 0;
-    var invalidCount = 0;
 
-    arr.forEach(function findMode(number) {
-        /* Skip zero heights */
-        if (number === 0) {
-            invalidCount += 1;
-            return;
-        }
+    const arrValid = arr.filter(val => val != 0)
 
+    arrValid.forEach(function findMode(number) {
         for(var i = number - config.modeFuzzing; i <= number + config.modeFuzzing; i++) {
             numMapping[i] = (numMapping[i] || 0) + 1;
 
@@ -433,10 +429,10 @@ function mode(arr) {
                 mode = i;
             }
         }
-
     });
 
-    const validCount = arr.length - invalidCount;
+    const invalidCount = arr.length - arrValid.length
+    const validCount = arrValid.length;
     const consensusPercent = (Math.round((greatestFreq / validCount * 100) * 100) / 100).toFixed(2);
     return {mode: mode, total: arr.length, valid: validCount, invalid: invalidCount, consensus: consensusPercent};
 }
