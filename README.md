@@ -1,8 +1,8 @@
 # pool-guardian
 
-Provides an API to monitor cryptonote mining pools
-Designed to work with HAProxy to provide high availabilty and smart daemon failover.
-Can also be used just for monitoring and alerts with uptime robot, monitority, pingdom, etc.. (HAProxy is not required)
+* Provides an API to monitor cryptonote mining pools
+* Designed to work with HAProxy to provide high availabilty and smart daemon failover.
+* Can also be used just for monitoring and alerts with uptime robot, monitority, pingdom, etc.. (HAProxy is not required)
 
 ## Prerequisites
 
